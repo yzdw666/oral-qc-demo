@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>口扫质控系统 - 完整演示</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #F5F5F7;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .animate-shimmer {
+            animation: shimmer 2s infinite;
+        }
+    </style>
+</head>
+<body class="text-slate-900 selection:bg-blue-100 selection:text-blue-700">
+
+    <div id="app"></div>
+
+    <script>
+        // --- State Management ---
+        const state = {
+            isLoggedIn: false,
+            currentView: 'WORKBENCH', // WORKBENCH
+            activeTab: 'REJECTED', // REJECTED, PENDING, PASS, ALL
+            selectedCase: null,
+            isBatchAnalyzing: false,
+            analysisProgress: 0,
+            batchSummary: null,
+            cases: [
+                {
+                    id: '20260204-0001',
+                    scanTime: '2026-03-27 09:04:00',
+                    status: 'PENDING',
+                    aiStatus: 'WAITING',
+                    issues: []
+                },
+                {
+                    id: '20260203-ERR-001',
+                    scanTime: '2026-03-27 10:00:00',
+                    status: 'RESCAN_REQ',
+                    aiStatus: 'COMPLETED',
+                    issues: ['模型断层']
+                },
+                {
+                    id: '20260201-PASS-0001',
+                    scanTime: '2026-03-27 11:00:00',
+                    status: 'PASS',
+                    aiStatus: 'COMPLETED',
+                    issues: []
+                }
+            ]
+        };
+
+        // --- Actions ---
+        function login() {
+            state.isLoggedIn = true;
+            render();
+        }
+
+        function logout() {
+            state.isLoggedIn = false;
+            render();
+        }
+
+        function setActiveTab(tab) {
+            state.activeTab = tab;
+            state.batchSummary = null;
+            render();
+        }
+
+        function selectCase(caseItem) {
+            state.selectedCase = caseItem;
+            render();
+        }
+
+        function closeDrawer() {
+            state.selectedCase = null;
+            render();
+        }
+
+        function runAI() {
+            const pending = state.cases.filter(c => c.status === 'PENDING');
+            if (pending.length === 0) return;
+
+            state.isBatchAnalyzing = true;
+            state.analysisProgress = 0;
+            render();
+
+            const interval = setInterval(() => {
+                state.analysisProgress += 10;
+                if (state.analysisProgress >= 100) {
+                    clearInterval(interval);
+                    state.isBatchAnalyzing = false;
+                    state.cases = state.cases.map(c => {
+                        if (c.status === 'PENDING') {
+                            return { ...c, status: 'PASS', aiStatus: 'COMPLETED' };
+                        }
+                        return c;
+                    });
+                    state.batchSummary = { total: pending.length, exceptions: 0 };
+                    render();
+                } else {
+                    render();
+                }
+            }, 300);
+        }
+
+        // --- Components ---
+
+        function LoginView() {
+            return `
+                <div class="min-h-screen relative flex flex-col items-center justify-center p-4 overflow-hidden bg-slate-50">
+                    <div class="absolute inset-0 z-0">
+                        <div class="absolute inset-0 bg-gradient-to-br from-slate-50 via-blue-50/60 to-slate-100"></div>
+                        <div class="absolute inset-0 opacity-[0.03]" style="background-image: linear-gradient(#3b82f6 1px, transparent 1px), linear-gradient(90deg, #3b82f6 1px, transparent 1px); background-size: 40px 40px"></div>
+                    </div>
+                    <div class="w-full max-w-md bg-white/80 backdrop-blur-xl rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/60 relative z-10 overflow-hidden">
+                        <div class="p-8 pb-6 text-center">
+                            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-500 text-white mb-6 shadow-lg shadow-blue-500/20">
+                                <i data-lucide="activity" class="w-8 h-8"></i>
+                            </div>
+                            <h1 class="text-2xl font-bold text-slate-800 mb-2 tracking-tight">口扫质检系统</h1>
+                            <div class="h-1 w-10 bg-blue-500 mx-auto rounded-full opacity-20 mt-4"></div>
+                        </div>
+                        <div class="px-8 pb-8 pt-2">
+                            <form onsubmit="event.preventDefault(); login();" class="space-y-5">
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-1.5 ml-1">账号</label>
+                                    <input type="text" value="admin" class="w-full px-4 py-3 bg-white/60 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" placeholder="请输入账号">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-700 mb-1.5 ml-1">密码</label>
+                                    <input type="password" value="password" class="w-full px-4 py-3 bg-white/60 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" placeholder="请输入密码">
+                                </div>
+                                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 mt-2">
+                                    登录系统 <i data-lucide="arrow-right" class="w-[18px] h-[18px]"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function MainLayout(content) {
+            return `
+                <div class="flex flex-col h-screen bg-[#F5F5F7]">
+                    <header class="h-16 bg-white/70 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-6 sticky top-0 z-50 shrink-0">
+                        <div class="flex items-center gap-3 w-64">
+                            <div class="w-9 h-9 bg-gradient-to-tr from-blue-600 to-cyan-500 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                                <i data-lucide="activity" class="w-5 h-5"></i>
+                            </div>
+                            <h1 class="font-bold text-slate-800 text-lg tracking-tight">口扫质控系统</h1>
+                        </div>
+                        <div class="flex items-center gap-5">
+                            <button class="relative p-2 text-slate-400 hover:text-slate-600">
+                                <i data-lucide="bell" class="w-5 h-5"></i>
+                                <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+                            </button>
+                            <div class="h-6 w-px bg-slate-200"></div>
+                            <div class="flex items-center gap-3 pl-1">
+                                <div class="text-right hidden md:block">
+                                    <p class="text-xs font-medium text-slate-500">高级质检员</p>
+                                    <p class="text-sm font-bold text-slate-800">工号 8902</p>
+                                </div>
+                                <div class="w-9 h-9 bg-slate-200 rounded-full flex items-center justify-center text-xs font-bold text-slate-600 border-2 border-white shadow-sm">QC</div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div class="flex flex-1 overflow-hidden">
+                        <aside class="w-64 bg-white/50 backdrop-blur-lg border-r border-slate-200/60 flex flex-col z-40 hidden md:flex">
+                            <nav class="flex-1 p-4 space-y-1">
+                                <button class="w-full flex items-center px-4 py-3 text-[15px] font-medium transition-all rounded-xl mb-1.5 bg-blue-500/10 text-blue-600">
+                                    <i data-lucide="list-todo" class="w-5 h-5 mr-3 text-blue-600"></i>
+                                    质检工作台
+                                </button>
+                            </nav>
+                            <div class="p-4 border-t border-slate-200/50">
+                                <button class="flex items-center text-slate-500 hover:text-slate-800 text-[15px] font-medium mb-1 px-4 py-3 w-full rounded-xl hover:bg-slate-100/80 transition-all">
+                                    <i data-lucide="settings" class="w-5 h-5 mr-3 text-slate-400"></i> 系统设置
+                                </button>
+                                <button onclick="logout()" class="flex items-center text-slate-500 hover:text-red-600 text-[15px] font-medium px-4 py-3 w-full rounded-xl hover:bg-red-50 transition-all group">
+                                    <i data-lucide="log-out" class="w-5 h-5 mr-3 text-slate-400 group-hover:text-red-500"></i> 退出系统
+                                </button>
+                            </div>
+                        </aside>
+                        <main class="flex-1 overflow-hidden relative shadow-inner">
+                            ${content}
+                        </main>
+                    </div>
+                </div>
+            `;
+        }
+
+        function Workbench() {
+            const filtered = state.cases.filter(c => {
+                if (state.activeTab === 'PENDING') return c.status === 'PENDING';
+                if (state.activeTab === 'PASS') return c.status === 'PASS';
+                if (state.activeTab === 'REJECTED') return c.status === 'RESCAN_REQ';
+                return true;
+            });
+
+            const counts = {
+                REJECTED: state.cases.filter(c => c.status === 'RESCAN_REQ').length,
+                PENDING: state.cases.filter(c => c.status === 'PENDING').length,
+                PASS: state.cases.filter(c => c.status === 'PASS').length,
+                ALL: state.cases.length
+            };
+
+            return `
+                <div class="flex flex-col h-full px-8 py-6 overflow-hidden relative bg-[#F5F5F7]">
+                    <div class="flex flex-col gap-6 mb-6 shrink-0">
+                        <div class="flex justify-between items-end">
+                            <h2 class="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-3">
+                                <span class="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+                                质检工作台
+                            </h2>
+                            <div class="flex items-center gap-3">
+                                <button class="px-5 py-2.5 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2">
+                                    <i data-lucide="upload-cloud" class="w-[18px] h-[18px]"></i>
+                                    <span class="text-sm font-bold">上传口扫文件</span>
+                                </button>
+                                ${state.activeTab === 'PENDING' ? `
+                                    <button onclick="runAI()" class="px-5 py-2.5 rounded-full shadow-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex items-center gap-2">
+                                        <i data-lucide="sparkles" class="w-[18px] h-[18px]"></i>
+                                        <span class="text-sm font-bold">AI质检</span>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            ${[
+                                { id: 'REJECTED', label: '异常待处理', icon: 'alert-triangle', color: 'amber' },
+                                { id: 'PENDING', label: '待质检', icon: 'clock', color: 'blue' },
+                                { id: 'PASS', label: '已完成', icon: 'check-circle-2', color: 'emerald' },
+                                { id: 'ALL', label: '全部', icon: 'list', color: 'slate' }
+                            ].map(tab => `
+                                <button onclick="setActiveTab('${tab.id}')" class="px-5 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 border ${state.activeTab === tab.id ? 'bg-white border-blue-300 text-blue-700 shadow-sm ring-2 ring-blue-100' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}">
+                                    <i data-lucide="${tab.icon}" class="w-4 h-4 ${state.activeTab === tab.id ? (tab.color === 'amber' ? 'text-amber-500' : tab.color === 'emerald' ? 'text-emerald-500' : 'text-blue-500') : 'text-slate-400'}"></i>
+                                    <span>${tab.label}</span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="flex-1 bg-white rounded-xl shadow-sm flex flex-col overflow-hidden border border-slate-200 relative">
+                        <div class="px-6 py-3 border-b border-slate-100 flex gap-3 bg-slate-50/50 items-center">
+                            <div class="relative">
+                                <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5"></i>
+                                <input type="text" placeholder="搜索患者姓名..." class="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-36 focus:outline-none">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-12 gap-4 px-6 py-3 bg-white border-b border-slate-100 text-xs font-semibold text-slate-500 sticky top-0 z-10">
+                            <div class="col-span-3">订单编号</div>
+                            <div class="col-span-3">订单时间</div>
+                            <div class="col-span-2">AI 判定</div>
+                            <div class="col-span-2">人工复核</div>
+                            <div class="col-span-1">状态</div>
+                            <div class="col-span-1 text-right">操作</div>
+                        </div>
+
+                        <div class="flex-1 overflow-y-auto custom-scrollbar relative">
+                            ${state.isBatchAnalyzing ? `
+                                <div class="absolute inset-0 bg-white/90 backdrop-blur-sm z-30 flex flex-col items-center justify-center">
+                                    <div class="w-96 text-center">
+                                        <div class="mb-6 relative w-24 h-24 mx-auto">
+                                            <div class="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
+                                            <div class="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div>
+                                            <div class="absolute inset-0 flex items-center justify-center">
+                                                <i data-lucide="bot" class="w-8 h-8 text-blue-600 animate-pulse"></i>
+                                            </div>
+                                        </div>
+                                        <h3 class="text-xl font-bold text-slate-800 mb-2">AI检测中...</h3>
+                                        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden relative">
+                                            <div class="h-full bg-blue-600 transition-all duration-300" style="width: ${state.analysisProgress}%"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            ${filtered.length === 0 ? `
+                                <div class="flex flex-col items-center justify-center h-64 text-slate-400">
+                                    <i data-lucide="list-filter" class="w-16 h-16 mb-4 text-slate-100"></i>
+                                    <p>暂无符合条件的病例</p>
+                                </div>
+                            ` : filtered.map(c => `
+                                <div class="grid grid-cols-12 gap-4 px-6 py-4 border-b border-slate-50 hover:bg-blue-50/30 items-center text-sm">
+                                    <div class="col-span-3 font-mono text-slate-600 text-xs bg-slate-100/50 px-2 py-1 rounded w-fit">${c.id}</div>
+                                    <div class="col-span-3 text-slate-400 text-xs font-mono">${c.scanTime}</div>
+                                    <div class="col-span-2">
+                                        ${c.aiStatus === 'WAITING' ? '<span class="text-slate-400 text-xs">等待中</span>' : ''}
+                                        ${c.aiStatus === 'COMPLETED' && c.status === 'PASS' ? '<span class="text-emerald-500 text-xs font-bold flex items-center gap-1"><i data-lucide="check" class="w-2.5 h-2.5"></i> 有效</span>' : ''}
+                                        ${c.aiStatus === 'COMPLETED' && c.status === 'RESCAN_REQ' ? '<span class="text-amber-500 text-xs font-bold flex items-center gap-1"><i data-lucide="alert-triangle" class="w-2.5 h-2.5"></i> 发现异常</span>' : ''}
+                                    </div>
+                                    <div class="col-span-2 text-slate-300 text-xs">-</div>
+                                    <div class="col-span-1">
+                                        ${c.status === 'PENDING' ? '<span class="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">待质检</span>' : ''}
+                                        ${c.status === 'PASS' ? '<span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-100">已完成</span>' : ''}
+                                        ${c.status === 'RESCAN_REQ' ? '<span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-bold border border-amber-100">异常待处理</span>' : ''}
+                                    </div>
+                                    <div class="col-span-1 text-right">
+                                        <button onclick="selectCase(${JSON.stringify(c).replace(/"/g, '&quot;')})" class="text-blue-600 hover:text-blue-800 font-medium text-xs px-2 py-1 hover:bg-blue-50 rounded">详情</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function CaseDrawer() {
+            if (!state.selectedCase) return '';
+            const c = state.selectedCase;
+            const isCompleted = c.status === 'PASS';
+
+            return `
+                <div class="fixed inset-0 z-50 flex justify-end">
+                    <div class="absolute inset-0 bg-slate-900/10 backdrop-blur-[2px]" onclick="closeDrawer()"></div>
+                    <div class="relative w-[55%] min-w-[600px] h-full bg-white shadow-2xl border-l border-slate-200 flex flex-col">
+                        <header class="h-16 border-b border-slate-100 flex items-center justify-between px-6 shrink-0">
+                            <div class="flex flex-col">
+                                <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <i data-lucide="file-text" class="w-[18px] h-[18px] text-blue-600"></i>
+                                    订单编号：${c.id}
+                                </h2>
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                    状态：${c.status === 'PASS' ? '已完成' : c.status === 'RESCAN_REQ' ? '异常待处理' : '待质检'}
+                                </span>
+                            </div>
+                            <button onclick="closeDrawer()" class="p-2 hover:bg-slate-100 rounded-full text-slate-400">
+                                <i data-lucide="x" class="w-5 h-5"></i>
+                            </button>
+                        </header>
+
+                        <div class="flex flex-1 overflow-hidden">
+                            <div class="w-[70%] bg-[#F8FAFC] flex flex-col relative border-r border-slate-100">
+                                <div class="flex-1 flex items-center justify-center text-slate-300">
+                                    <div class="text-center">
+                                        <i data-lucide="box" class="w-16 h-16 mx-auto mb-4 opacity-20"></i>
+                                        <p class="text-sm">3D 模型预览区域</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="w-[30%] flex flex-col bg-white overflow-hidden">
+                                <div class="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                                    <div class="space-y-6">
+                                        <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                                            <i data-lucide="sparkles" class="w-[18px] h-[18px] text-blue-500"></i>
+                                            AI 检测结果
+                                        </h3>
+                                        <div class="space-y-4">
+                                            <div class="p-4 rounded-xl border border-slate-100 bg-white shadow-sm">
+                                                <span class="font-bold text-sm text-slate-700">边缘密合度</span>
+                                                <p class="text-xs text-slate-500 leading-relaxed mt-1">
+                                                    ${isCompleted ? '检测通过，边缘密合良好。' : '14号牙位远中边缘存在0.2mm间隙，建议检查。'}
+                                                </p>
+                                            </div>
+                                            <div class="p-4 rounded-xl border border-slate-100 bg-white shadow-sm">
+                                                <span class="font-bold text-sm text-slate-700">倒凹检测</span>
+                                                <p class="text-xs text-slate-500 leading-relaxed mt-1">
+                                                    ${isCompleted ? '无明显倒凹。' : '基牙近中面存在轻微倒凹，可能影响就位。'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                ${!isCompleted ? `
+                                    <div class="p-6 border-t border-slate-100 bg-slate-50/30 flex justify-end gap-3">
+                                        <button class="px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50">数据可接受</button>
+                                        <button class="px-6 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-lg shadow-red-500/20">需补扫</button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Render Loop ---
+        function render() {
+            const app = document.getElementById('app');
+            if (!state.isLoggedIn) {
+                app.innerHTML = LoginView();
+            } else {
+                app.innerHTML = MainLayout(Workbench()) + CaseDrawer();
+            }
+            lucide.createIcons();
+        }
+
+        // Initial render
+        render();
+
+    </script>
+</body>
+</html>
